@@ -1,0 +1,32 @@
+#syntax=docker/dockerfile:1
+
+##
+## Build
+##
+FROM rust:1-slim AS build
+LABEL org.opencontainers.image.authors="Sangbum Kim <sangbumkim@amuz.es>"
+
+# set the workdir and copy the source into it
+WORKDIR /app
+COPY . /app
+
+# ENV RUSTFLAGS='-C link-arg=-s -C linker=rust-lld  -C link-arg=-fuse-ld=lld'
+# ENV RUSTFLAGS='-C link-arg=-s -C link-arg=-fuse-ld=lld'
+# ENV RUSTFLAGS='-C target-feature=+crt-static -C link-arg=-s -C link-args=-nostartfiles -C link-arg=-nostdlib'
+# ENV RUSTFLAGS='-C target-feature=+crt-static -C link-arg=-s'
+# ENV RUSTFLAGS='-C target-feature=+crt-static -C link-arg=-s'
+# ENV RUSTFLAGS='-C target-feature=+crt-static -C link-arg=-static -C link-arg=-s'
+# ENV RUSTFLAGS='-C target-feature=+crt-static -C link-arg=-static -C link-arg=-s -C link-arg=-fuse-ld=lld'
+# ENV RUSTFLAGS='-C target-feature=+crt-static -C link-arg=-s -C link-arg=-fuse-ld=lld'
+
+# do a release build
+RUN set -x && \
+    cargo build --release && \
+    ldd target/release/init-wrapper
+
+#RUN --mount=type=bind,rw,source=.,target=/host \
+#    cp -avf target/release/init-wrapper /host/init-wrapper
+
+
+FROM scratch
+COPY --from=build /app/target/release/init-wrapper /init-wrapper
