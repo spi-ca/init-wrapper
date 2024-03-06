@@ -12,7 +12,7 @@ use core::ptr::null;
 use core::time::Duration;
 use errno::{errno, Errno};
 use libc::{
-    c_int, c_void, chdir, clock_gettime, execvp, mkdir, mode_t, mount, rmdir, syscall, timespec,
+    c_int, c_void, chdir, clock_gettime, execv, mkdir, mode_t, mount, rmdir, syscall, timespec,
     umount2, SYS_pivot_root, CLOCK_BOOTTIME, EXIT_FAILURE, EXIT_SUCCESS, MNT_DETACH, MS_BIND,
     MS_LAZYTIME, MS_MOVE, MS_NODEV, MS_NOSUID, MS_PRIVATE, MS_RDONLY, MS_REC, MS_RELATIME,
 };
@@ -180,14 +180,14 @@ fn replace_root() -> Result<(), ()> {
     };
 
     let ovr_dir_structures = [
-        "/run/overlay",
-        "/run/overlay/lower",
-        "/run/overlay/upper",
-        "/run/overlay/work",
-        "/run/overlay/merged",
+        ("/run/overlay", 0o0700),
+        ("/run/overlay/lower", 0o0700),
+        ("/run/overlay/upper", 0o0755),
+        ("/run/overlay/work", 0o0755),
+        ("/run/overlay/merged", 0o0755),
     ];
-    for path in ovr_dir_structures {
-        match do_mkdir(path, 0o0700) {
+    for (path, mode) in ovr_dir_structures {
+        match do_mkdir(path, mode) {
             Err(e) => {
                 eprintln!("mkdir \"{}\" failed: {}", path, e);
                 return Err(());
@@ -283,7 +283,7 @@ fn replace_root() -> Result<(), ()> {
 }
 
 #[no_mangle]
-unsafe extern "C" fn main(_argc: c_int, argv: *const *const u8) -> c_int {
+unsafe extern "C" fn main(_argc: c_int, argv: *mut *const u8) -> c_int {
     let start = match do_gettime() {
         Err(err) => {
             eprintln!("{}", err);
@@ -307,8 +307,10 @@ unsafe extern "C" fn main(_argc: c_int, argv: *const *const u8) -> c_int {
     let elapsed = end - start;
     eprintln!("processed in {:?}", elapsed);
 
+    // overwrite arg0
     let init_path = CStr::from_bytes_with_nul_unchecked(b"/sbin/init\0");
-    execvp(init_path.as_ptr(), argv);
+    *argv = init_path.as_ptr();
+    execv(init_path.as_ptr(), argv);
 
     EXIT_SUCCESS
 }
