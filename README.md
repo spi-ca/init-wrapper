@@ -22,3 +22,11 @@ rmdir /oldroot
 rmdir /run/overlay/merged
 exec /sbin/init
 ```
+
+
+## USAGE
+When booting the kernel, add the following line to the append parameter: 
+
+```
+init=/sbin/init-wrapper
+```
