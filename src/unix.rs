@@ -1,17 +1,16 @@
-use crate::tm::{new_timespec, Timespec};
 use alloc::ffi::CString;
-use core::borrow::BorrowMut;
 use core::ptr::null;
 use errno::{errno, Errno};
-use libc::{
-    c_void, chdir, clock_gettime, execv, mkdir, mode_t, mount, rmdir, syscall, umount2,
-    SYS_pivot_root, CLOCK_BOOTTIME,
-};
+use libc::{c_void, chdir, execv, mkdir, mode_t, mount, rmdir, syscall, umount2, SYS_pivot_root};
 
 #[cfg(test)]
+use crate::tm::{new_timespec, Timespec};
+#[cfg(test)]
+use core::borrow::BorrowMut;
+#[cfg(test)]
 use libc::{
-    c_uint, makedev, mkdir, mknod, mode_t, mount, readlinkat, rmdir, strlen, syscall, umount2,
-    unlink, SYS_pivot_root, AT_FDCWD, CLOCK_BOOTTIME, S_IFCHR,
+    c_uint, clock_gettime, makedev, mkdir, mknod, mode_t, mount, readlinkat, rmdir, strlen,
+    syscall, umount2, unlink, SYS_pivot_root, AT_FDCWD, CLOCK_BOOTTIME, CLOCK_BOOTTIME, S_IFCHR,
 };
 
 pub(crate) type SystemResult = Result<(), Errno>;
@@ -74,7 +73,7 @@ pub(crate) fn do_umount(path: &str, flags: i32) -> SystemResult {
 }
 
 #[cfg(test)]
-pub(crate) fn do_readlink(path: &str) -> Result<CString, Errno> {
+pub(crate) fn do_readlink(path: &str) -> Result<&str, Errno> {
     // has ownership
     let raw_path = CString::new(path).unwrap();
     unsafe {
@@ -172,6 +171,7 @@ pub(crate) fn do_pivot_root(new_root: &str, put_old: &str) -> SystemResult {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn do_gettime() -> Result<Timespec, Errno> {
     let mut time = new_timespec();
 

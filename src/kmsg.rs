@@ -26,6 +26,21 @@ pub(crate) fn init_kmsg() {
 #[macro_export]
 macro_rules! kprintln {
     () => { $crate::kprintln!("") };
+    ($fmt: expr) => {
+        {
+            #[allow(unused_must_use)]
+            unsafe {
+                let mut stm = libc_print::__LibCWriter::new($crate::kmsg::LOG_FD);
+                let buf=alloc::format!("init-wrapper: {}",$fmt);
+                for line in buf.lines(){
+                    stm.write_str(&line);
+                }
+                if (!$crate::kmsg::LOG_FD_KMSG) {
+                    stm.write_nl();
+                }
+            }
+        }
+   };
     ($fmt: tt) => {
         {
             #[allow(unused_must_use)]
