@@ -10,7 +10,7 @@ LABEL org.opencontainers.image.authors="Sangbum Kim <sangbumkim@amuz.es>"
 WORKDIR /app
 COPY . /app
 
-ENV RUSTFLAGS='-C link-arg=-s -C link-arg=-fuse-ld=lld'
+ENV RUSTFLAGS='-C panic=abort -C link-arg=-s -C link-arg=-fuse-ld=lld'
 
 RUN set -x && \
     apk add --no-cache \
@@ -22,6 +22,7 @@ RUN set -x && \
 RUN set -x && \
     cargo build --release && \
     ls -alh target/release/init-wrapper
+    # ldd target/release/init-wrapper && \
     # && \
     # ldd target/release/init-wrapper
 

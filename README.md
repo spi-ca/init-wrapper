@@ -16,6 +16,7 @@ mount -t overlay -o rw,relatime,lowerdir=/run/overlay/lower,upperdir=/run/overla
 mkdir -p /run/overlay/merged/oldroot
 pivot_root /run/overlay/merged /run/overlay/merged/oldroot
 cd /
+mount  --move /oldroot/dev /dev || true
 mount  --move /oldroot/run /run
 umount -l /oldroot
 rmdir /oldroot
