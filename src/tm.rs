@@ -7,6 +7,7 @@ pub(crate) struct Timespec {
     pub(crate) ts: timespec,
 }
 
+#[cfg(test)]
 pub(crate) fn new_timespec() -> Timespec {
     Timespec {
         ts: timespec {
@@ -15,6 +16,7 @@ pub(crate) fn new_timespec() -> Timespec {
         },
     }
 }
+
 impl Sub<Timespec> for Timespec {
     type Output = Duration;
 

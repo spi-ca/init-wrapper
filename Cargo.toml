@@ -7,7 +7,7 @@ edition = "2018"
 
 [dependencies]
 libc = { version = "0.2", default-features = false }
-libc-print = "0.1.22"
+libc-print = "0.1.23"
 errno = { version = "*", default-features = false }
 
 [profile.dev]
