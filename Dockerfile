@@ -3,14 +3,15 @@
 ##
 ## Build
 ##
-FROM rust:1-alpine3.19 AS build
+FROM rust:1-alpine3.20 AS build
 LABEL org.opencontainers.image.authors="Sangbum Kim <sangbumkim@amuz.es>"
 
 # set the workdir and copy the source into it
 WORKDIR /app
 COPY . /app
 
-ENV RUSTFLAGS='-C panic=abort -C link-arg=-s -C link-arg=-fuse-ld=lld'
+
+ENV RUSTFLAGS='-Cpanic=abort -Crelocation-model=static -Clink-args=-Wl,-x,-s,-fuse-ld=lld,--as-needed,--gc-sections,--no-gnu-unique,--nostdlib,--no-pie,--build-id=none,--no-eh-frame-hdr'
 
 RUN set -x && \
     apk add --no-cache \
@@ -20,15 +21,19 @@ RUN set -x && \
         musl-dev
 
 RUN set -x && \
-    cargo build --release && \
-    ls -alh target/release/init-wrapper
+    cargo build --release  -- -C prefer-dynamic&& \
+    objcopy -R .eh_frame -R .got.plt target/release/init-wrapper target/release/init-wrapper && \
+    ls -alh target/release/init-wrapper && \
+    readelf -W -S  ./target/release/init-wrapper
+#    && \
+#    ./target/release/init-wrapper
     # ldd target/release/init-wrapper && \
     # && \
     # ldd target/release/init-wrapper
 
-# RUN --mount=type=bind,rw,source=.,target=/host \
-#     cp -avf target/release/init-wrapper /host/init-wrapper && \
-#     ./target/release/init-wrapper
+ RUN --mount=type=bind,rw,source=.,target=/host \
+     cp -avf target/release/init-wrapper /host/init-wrapper && \
+     ./target/release/init-wrapper
 
 
 FROM scratch
