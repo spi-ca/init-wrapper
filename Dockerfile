@@ -21,7 +21,7 @@ RUN set -x && \
         musl-dev
 
 RUN set -x && \
-    cargo build --release  -- -C prefer-dynamic&& \
+    cargo build --release && \
     objcopy -R .eh_frame -R .got.plt target/release/init-wrapper target/release/init-wrapper && \
     ls -alh target/release/init-wrapper && \
     readelf -W -S  ./target/release/init-wrapper
