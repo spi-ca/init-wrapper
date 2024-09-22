@@ -130,7 +130,7 @@ pub(crate) fn do_rmdir(path: &str) -> SystemResult {
     }
 }
 
-pub(crate) fn do_execv(path: &str, argv: *mut *const u8) -> SystemResult {
+pub(crate) fn do_execv(path: &str, argv: *mut *const i8) -> SystemResult {
     let raw_init_path = CString::new(path).unwrap();
     unsafe {
         *argv = raw_init_path.as_ref().as_ptr();

@@ -123,7 +123,7 @@ fn replace_root() -> Result<(), String> {
 }
 
 #[no_mangle]
-unsafe extern "C" fn main(_argc: c_int, argv: *mut *const u8) -> c_int {
+unsafe extern "C" fn main(_argc: c_int, argv: *mut *const i8) -> c_int {
     init_kmsg();
 
     match replace_root() {
