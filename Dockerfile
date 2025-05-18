@@ -25,15 +25,11 @@ RUN set -x && \
     objcopy -R .eh_frame -R .got.plt target/release/init-wrapper target/release/init-wrapper && \
     ls -alh target/release/init-wrapper && \
     readelf -W -S  ./target/release/init-wrapper
-#    && \
-#    ./target/release/init-wrapper
-    # ldd target/release/init-wrapper && \
-    # && \
-    # ldd target/release/init-wrapper
 
- RUN --mount=type=bind,rw,source=.,target=/host \
-     cp -avf target/release/init-wrapper /host/init-wrapper && \
-     ./target/release/init-wrapper
+RUN --mount=type=bind,rw,source=.,target=/host \
+    cp -avf target/release/init-wrapper /host/init-wrapper
+#     cp -avf target/release/init-wrapper /host/init-wrapper && \
+#     ./target/release/init-wrapper
 
 
 FROM scratch
