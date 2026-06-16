@@ -1,0 +1,12 @@
+flowchart TD
+    main["src/main.rs\nPID 1 entry\nreplace_root + init fallback"]
+
+    main --> kmsg["src/kmsg.rs\n/dev/kmsg 우선 로깅\n실패 시 stderr"]
+    main --> unix["src/unix.rs\nsyscall wrappers\nmount, mkdir, pivot_root, execv"]
+    main --> mem["src/mem.rs\n64 KiB bump allocator"]
+    main --> link["src/link.rs\npanic/unwind glue\nlibc symbol linkage"]
+    main --> tm["src/tm.rs\nTimespec helper\n(test/support code)"]
+
+    unix --> run["/run tmpfs\nvolatile upper/work backing"]
+    unix --> overlay["overlayfs merged root\nlower=/ (bind + remount ro)\nupper/work=/run/overlay/*"]
+    main --> init["init candidate hand-off\n/sbin/init\n/usr/sbin/init\n/usr/lib/systemd/systemd"]
