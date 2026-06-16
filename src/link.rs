@@ -9,8 +9,10 @@ extern "C" {
     static stderr: *mut FILE;
 }
 
+#[cfg(not(test))]
 #[no_mangle]
 extern "C" fn rust_eh_personality() {}
+#[cfg(not(test))]
 #[no_mangle]
 unsafe extern "C" fn _Unwind_Resume() -> ! {
     exit(2)

@@ -1,4 +1,6 @@
 use alloc::ffi::CString;
+#[cfg(test)]
+use alloc::string::String;
 use core::ptr::null;
 use errno::{errno, Errno};
 use libc::{c_void, chdir, execv, mkdir, mode_t, mount, rmdir, syscall, umount2, SYS_pivot_root};
@@ -9,8 +11,8 @@ use crate::tm::{new_timespec, Timespec};
 use core::borrow::BorrowMut;
 #[cfg(test)]
 use libc::{
-    c_uint, clock_gettime, makedev, mkdir, mknod, mode_t, mount, readlinkat, rmdir, strlen,
-    syscall, umount2, unlink, SYS_pivot_root, AT_FDCWD, CLOCK_BOOTTIME, CLOCK_BOOTTIME, S_IFCHR,
+    c_uint, clock_gettime, makedev, mknod, readlinkat, size_t, unlink, AT_FDCWD, CLOCK_BOOTTIME,
+    S_IFCHR,
 };
 
 pub(crate) type SystemResult = Result<(), Errno>;
@@ -39,10 +41,10 @@ pub(crate) fn do_mount(
     opt: Option<&str>,
 ) -> SystemResult {
     // has ownership
-    let raw_src = source.map(|v| CString::new(v).ok()).flatten();
-    let raw_tgt = target.map(|v| CString::new(v).ok()).flatten();
-    let raw_fs = fs.map(|v| CString::new(v).ok()).flatten();
-    let raw_fs_opt = opt.map(|v| CString::new(v).ok()).flatten();
+    let raw_src = source.and_then(|v| CString::new(v).ok());
+    let raw_tgt = target.and_then(|v| CString::new(v).ok());
+    let raw_fs = fs.and_then(|v| CString::new(v).ok());
+    let raw_fs_opt = opt.and_then(|v| CString::new(v).ok());
 
     unsafe {
         if mount(
@@ -73,23 +75,22 @@ pub(crate) fn do_umount(path: &str, flags: i32) -> SystemResult {
 }
 
 #[cfg(test)]
-pub(crate) fn do_readlink(path: &str) -> Result<&str, Errno> {
+pub(crate) fn do_readlink(path: &str) -> Result<String, Errno> {
     // has ownership
     let raw_path = CString::new(path).unwrap();
     unsafe {
         const BUF_SZ: usize = 1024;
         let mut buf = [0u8; BUF_SZ];
-        if readlinkat(
+        let len = readlinkat(
             AT_FDCWD,
             raw_path.as_ref().as_ptr(),
             buf.as_mut_ptr() as *mut _,
             buf.len() as size_t,
-        ) == -1
-        {
+        );
+        if len == -1 {
             return Err(errno());
         }
-        let c_str_len = strlen(buf.as_ptr() as *const _);
-        Ok(from_utf8_lossy(&buf[..c_str_len]))
+        Ok(String::from_utf8_lossy(&buf[..len as usize]).into_owned())
     }
 }
 
@@ -179,16 +180,91 @@ pub(crate) fn do_gettime() -> Result<Timespec, Errno> {
         if clock_gettime(CLOCK_BOOTTIME, time.ts.borrow_mut()) == -1 {
             Err(errno())
         } else {
-            Ok(time.into())
+            Ok(time)
         }
     }
 }
 
 #[cfg(test)]
-#[inline]
-fn from_utf8_lossy(input: &[u8]) -> &str {
-    match str::from_utf8(input) {
-        Ok(valid) => valid,
-        Err(error) => unsafe { str::from_utf8_unchecked(&input[..error.valid_up_to()]) },
+mod tests {
+    extern crate std;
+
+    use super::*;
+    use std::format;
+    use std::fs;
+    use std::os::unix::fs::symlink;
+    use std::path::PathBuf;
+    use std::string::ToString;
+
+    fn temp_path(name: &str) -> PathBuf {
+        let mut path = std::env::temp_dir();
+        path.push(format!("init-wrapper-{}-{}", std::process::id(), name));
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_dir_all(&path);
+        path
+    }
+
+    #[test]
+    fn mkdir_and_rmdir_forward_success_and_errno() {
+        let dir = temp_path("mkdir-rmdir");
+        let dir_str = dir.to_string_lossy().to_string();
+
+        do_mkdir(&dir_str, 0o700).expect("mkdir should create temp dir");
+        assert!(dir.is_dir());
+        assert!(do_mkdir(&dir_str, 0o700).is_err());
+        do_rmdir(&dir_str).expect("rmdir should remove temp dir");
+        assert!(!dir.exists());
+        assert!(do_rmdir(&dir_str).is_err());
+    }
+
+    #[test]
+    fn unlink_removes_files_and_reports_missing_paths() {
+        let file = temp_path("unlink");
+        fs::write(&file, b"x").expect("write temp file");
+        let file_str = file.to_string_lossy().to_string();
+
+        do_unlink(&file_str).expect("unlink should remove temp file");
+        assert!(!file.exists());
+        assert!(do_unlink(&file_str).is_err());
+    }
+
+    #[test]
+    fn readlink_returns_owned_target_without_requiring_nul_termination() {
+        let link = temp_path("readlink");
+        symlink("target-without-nul", &link).expect("create symlink");
+        let link_str = link.to_string_lossy().to_string();
+
+        let target = do_readlink(&link_str).expect("readlink should succeed");
+        assert_eq!(target, "target-without-nul");
+        fs::remove_file(&link).expect("cleanup symlink");
+    }
+
+    #[test]
+    fn readlink_reports_missing_path() {
+        let missing = temp_path("missing-readlink");
+        let missing_str = missing.to_string_lossy().to_string();
+        assert!(do_readlink(&missing_str).is_err());
+    }
+
+    #[test]
+    fn chdir_changes_directory_and_reports_missing_paths() {
+        let original = std::env::current_dir().expect("current dir");
+        let dir = temp_path("chdir");
+        fs::create_dir(&dir).expect("create temp dir");
+        let dir_str = dir.to_string_lossy().to_string();
+
+        do_chdir(&dir_str).expect("chdir should enter temp dir");
+        assert_eq!(std::env::current_dir().expect("new cwd"), dir);
+        std::env::set_current_dir(&original).expect("restore cwd");
+        fs::remove_dir(&dir).expect("cleanup temp dir");
+        assert!(do_chdir(&dir_str).is_err());
+    }
+
+    #[test]
+    fn gettime_returns_boottime_value() {
+        let time = do_gettime().expect("clock_gettime(CLOCK_BOOTTIME) should work");
+        assert!(time.ts.tv_sec >= 0);
+        assert!(time.ts.tv_nsec >= 0);
+        assert!(time.ts.tv_nsec < 1_000_000_000);
     }
 }
