@@ -3,7 +3,7 @@
 ##
 ## Build
 ##
-FROM rust:1-alpine3.20 AS build
+FROM rust:1.96.0-alpine3.20 AS build
 LABEL org.opencontainers.image.authors="Sangbum Kim <sangbumkim@amuz.es>"
 
 # set the workdir and copy the source into it

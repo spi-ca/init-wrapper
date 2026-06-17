@@ -5,10 +5,14 @@ edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = []
+compat-overlay = []
+
 [dependencies]
 libc = { version = "0.2", default-features = false }
 libc-print = "0.1.23"
-errno = { version = "*", default-features = false }
+errno = { version = "0.3.14", default-features = false }
 static-alloc = "0.2.5"
 
 [profile.dev]

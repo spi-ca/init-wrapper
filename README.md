@@ -94,6 +94,8 @@ init=/sbin/init-wrapper
 - `cargo build --release`만 실행하면 기본 산출물은 `target/release/init-wrapper`입니다.
 - 저장소의 `cargo/config.toml`은 Cargo가 자동으로 읽는 기본 위치가 아닙니다. 운영자가 이를 `.cargo/config.toml`로 복사/이름변경하거나 `--target aarch64-unknown-linux-musl`를 명시했을 때만 산출물 경로가 `target/aarch64-unknown-linux-musl/release/init-wrapper`로 바뀝니다.
 - 이 프로젝트는 `#![no_std]`, `#![no_main]`, `panic = "abort"` 구성을 사용합니다.
+- `rust-toolchain.toml`은 개발/검증용 Rust toolchain을 `1.96.0`으로 고정합니다.
+- 기본 빌드는 overlay mount 실패 시 즉시 실패하는 엄격 모드입니다. 커널 호환성이 더 중요하면 `--features compat-overlay`로 `volatile` 제거 옵션과 최소 lower/upper/work 옵션을 순서대로 재시도할 수 있습니다.
 - `Dockerfile`, `Dockerfile.debian`이 포함되어 있어 컨테이너 안에서 release 빌드를 재현할 수 있습니다.
 - 실제 배포 전에는 대상 커널/루트 파일시스템 조합에서 init 후보 경로와 overlay 옵션 호환성을 따로 확인하는 편이 안전합니다.
 

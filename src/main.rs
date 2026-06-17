@@ -34,6 +34,12 @@ const LOWER_READONLY_REMOUNT_FLAGS: u64 = MS_BIND | MS_REMOUNT | MS_RDONLY;
 const MOVE_MOUNT_FLAGS: u64 = MS_REC | MS_MOVE;
 const OLDROOT_UMOUNT_FLAGS: i32 = MNT_DETACH;
 const OVERLAY_OPTIONS: &str = "lowerdir=/run/overlay/lower,upperdir=/run/overlay/upper,workdir=/run/overlay/work,redirect_dir=on,uuid=on,metacopy=on,volatile";
+#[cfg(feature = "compat-overlay")]
+const OVERLAY_COMPAT_OPTIONS: [&str; 3] = [
+    OVERLAY_OPTIONS,
+    "lowerdir=/run/overlay/lower,upperdir=/run/overlay/upper,workdir=/run/overlay/work,redirect_dir=on,uuid=on,metacopy=on",
+    "lowerdir=/run/overlay/lower,upperdir=/run/overlay/upper,workdir=/run/overlay/work",
+];
 const OVERLAY_DIRS: [(&str, u32); 5] = [
     ("/run/overlay", 0o0700),
     ("/run/overlay/lower", 0o0700),
@@ -139,6 +145,35 @@ fn should_try_next_init(error: Errno) -> bool {
     )
 }
 
+#[cfg(all(not(test), not(feature = "compat-overlay")))]
+fn mount_overlay_root() -> Result<(), Errno> {
+    do_mount(
+        Some("rootfs"),
+        Some("/run/overlay/merged"),
+        Some("overlay"),
+        OVERLAY_ROOT_FLAGS,
+        Some(OVERLAY_OPTIONS),
+    )
+}
+
+#[cfg(all(not(test), feature = "compat-overlay"))]
+fn mount_overlay_root() -> Result<(), Errno> {
+    let mut last_error = Errno(EINVAL);
+    for options in OVERLAY_COMPAT_OPTIONS {
+        match do_mount(
+            Some("rootfs"),
+            Some("/run/overlay/merged"),
+            Some("overlay"),
+            OVERLAY_ROOT_FLAGS,
+            Some(options),
+        ) {
+            Ok(()) => return Ok(()),
+            Err(error) => last_error = error,
+        }
+    }
+    Err(last_error)
+}
+
 #[cfg(not(test))]
 fn execute_root_action(action: RootAction) -> Result<(), String> {
     match action {
@@ -171,14 +206,9 @@ fn execute_root_action(action: RootAction) -> Result<(), String> {
             None,
         )
         .map_err(|e| format!("remount \"/run/overlay/lower\" readonly failed: {}", e)),
-        RootAction::MountOverlay => do_mount(
-            Some("rootfs"),
-            Some("/run/overlay/merged"),
-            Some("overlay"),
-            OVERLAY_ROOT_FLAGS,
-            Some(OVERLAY_OPTIONS),
-        )
-        .map_err(|e| format!("mount \"/run/overlay/merged\" failed: {}", e)),
+        RootAction::MountOverlay => {
+            mount_overlay_root().map_err(|e| format!("mount \"/run/overlay/merged\" failed: {}", e))
+        }
         RootAction::PivotRoot => {
             do_pivot_root("/run/overlay/merged", "/run/overlay/merged/oldroot")
                 .map_err(|e| format!("pivot_root failed: {}", e))
@@ -339,6 +369,18 @@ mod tests {
         ] {
             assert!(OVERLAY_OPTIONS.split(',').any(|option| option == required));
         }
+    }
+
+    #[cfg(feature = "compat-overlay")]
+    #[test]
+    fn compat_overlay_candidates_keep_strict_first_and_minimal_last() {
+        assert_eq!(OVERLAY_COMPAT_OPTIONS[0], OVERLAY_OPTIONS);
+        assert_eq!(
+            *OVERLAY_COMPAT_OPTIONS.last().unwrap(),
+            "lowerdir=/run/overlay/lower,upperdir=/run/overlay/upper,workdir=/run/overlay/work"
+        );
+        assert!(OVERLAY_COMPAT_OPTIONS[1].contains("metacopy=on"));
+        assert!(!OVERLAY_COMPAT_OPTIONS[1].contains("volatile"));
     }
 
     #[test]
