@@ -1,9 +1,13 @@
+#![cfg_attr(test, allow(dead_code))]
+
 use alloc::ffi::CString;
 #[cfg(test)]
 use alloc::string::String;
 use core::ptr::null;
 use errno::{errno, Errno};
-use libc::{c_void, chdir, execv, mkdir, mode_t, mount, rmdir, syscall, umount2, SYS_pivot_root};
+use libc::{
+    c_void, chdir, execv, mkdir, mode_t, mount, rmdir, syscall, umount2, SYS_pivot_root, EINVAL,
+};
 
 #[cfg(test)]
 use crate::tm::{new_timespec, Timespec};
@@ -40,11 +44,10 @@ pub(crate) fn do_mount(
     flags: u64,
     opt: Option<&str>,
 ) -> SystemResult {
-    // has ownership
-    let raw_src = source.and_then(|v| CString::new(v).ok());
-    let raw_tgt = target.and_then(|v| CString::new(v).ok());
-    let raw_fs = fs.and_then(|v| CString::new(v).ok());
-    let raw_fs_opt = opt.and_then(|v| CString::new(v).ok());
+    let raw_src = optional_c_string(source)?;
+    let raw_tgt = optional_c_string(target)?;
+    let raw_fs = optional_c_string(fs)?;
+    let raw_fs_opt = optional_c_string(opt)?;
 
     unsafe {
         if mount(
@@ -131,8 +134,19 @@ pub(crate) fn do_rmdir(path: &str) -> SystemResult {
     }
 }
 
+fn optional_c_string(value: Option<&str>) -> Result<Option<CString>, Errno> {
+    value
+        .map(CString::new)
+        .transpose()
+        .map_err(|_| Errno(EINVAL))
+}
+
 pub(crate) fn do_execv(path: &str, argv: *mut *const i8) -> SystemResult {
-    let raw_init_path = CString::new(path).unwrap();
+    if argv.is_null() {
+        return Err(Errno(EINVAL));
+    }
+
+    let raw_init_path = CString::new(path).map_err(|_| Errno(EINVAL))?;
     unsafe {
         *argv = raw_init_path.as_ref().as_ptr();
         if execv(raw_init_path.as_ref().as_ptr(), argv) == -1 {
@@ -258,6 +272,37 @@ mod tests {
         std::env::set_current_dir(&original).expect("restore cwd");
         fs::remove_dir(&dir).expect("cleanup temp dir");
         assert!(do_chdir(&dir_str).is_err());
+    }
+
+    #[test]
+    fn mount_rejects_nul_bytes_before_syscall() {
+        assert_eq!(
+            do_mount(Some("bad\0source"), None, None, 0, None),
+            Err(Errno(EINVAL))
+        );
+        assert_eq!(
+            do_mount(None, Some("bad\0target"), None, 0, None),
+            Err(Errno(EINVAL))
+        );
+        assert_eq!(
+            do_mount(None, None, Some("bad\0fs"), 0, None),
+            Err(Errno(EINVAL))
+        );
+        assert_eq!(
+            do_mount(None, None, None, 0, Some("bad\0option")),
+            Err(Errno(EINVAL))
+        );
+    }
+
+    #[test]
+    fn execv_rejects_null_argv_and_nul_path_before_syscall() {
+        assert_eq!(
+            do_execv("/sbin/init", core::ptr::null_mut()),
+            Err(Errno(EINVAL))
+        );
+
+        let mut argv = [core::ptr::null()];
+        assert_eq!(do_execv("bad\0init", argv.as_mut_ptr()), Err(Errno(EINVAL)));
     }
 
     #[test]
