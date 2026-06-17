@@ -1,7 +1,9 @@
 #![allow(unused_imports)]
+#![cfg_attr(test, allow(dead_code))]
 
 use alloc::format;
 use core::ffi::CStr;
+use core::fmt::Arguments;
 use libc::{c_char, c_int, open, FILE, O_APPEND, O_CLOEXEC, O_SYNC, O_WRONLY, STDERR_FILENO};
 use libc_print::__LibCWriter;
 pub(crate) static mut LOG_FD: c_int = STDERR_FILENO;
@@ -24,53 +26,32 @@ pub(crate) fn init_kmsg() {
     }
 }
 
+#[inline]
+pub(crate) fn write_log_line(args: Arguments<'_>) {
+    #[allow(unused_must_use)]
+    unsafe {
+        let mut stm = libc_print::__LibCWriter::new(crate::kmsg::LOG_FD);
+        if crate::kmsg::LOG_FD_KMSG {
+            let buf = alloc::format!("init-wrapper: {}", args);
+            for line in buf.lines() {
+                stm.write_str(line);
+            }
+        } else {
+            stm.write_str("init-wrapper: ");
+            stm.write_fmt(args);
+            stm.write_nl();
+        }
+    }
+}
+
 #[macro_export]
 macro_rules! kprintln {
     () => { $crate::kprintln!("") };
-    ($fmt: expr) => {
-        {
-            #[allow(unused_must_use)]
-            unsafe {
-                let mut stm = libc_print::__LibCWriter::new($crate::kmsg::LOG_FD);
-                let buf=alloc::format!("init-wrapper: {}",$fmt);
-                for line in buf.lines(){
-                    stm.write_str(&line);
-                }
-                if (!$crate::kmsg::LOG_FD_KMSG) {
-                    stm.write_nl();
-                }
-            }
-        }
-   };
     ($fmt: tt) => {
-        {
-            #[allow(unused_must_use)]
-            unsafe {
-                let mut stm = libc_print::__LibCWriter::new($crate::kmsg::LOG_FD);
-                stm.write_str(concat!("init-wrapper: ",$fmt));
-                if (!$crate::kmsg::LOG_FD_KMSG) {
-                    stm.write_nl();
-                }
-            }
-        }
-   };
+        $crate::kmsg::write_log_line(format_args!($fmt))
+    };
     ($fmt: tt, $($arg:tt)*) =>{
-        {
-
-            #[allow(unused_must_use)]
-            unsafe {
-                let mut stm = libc_print::__LibCWriter::new($crate::kmsg::LOG_FD);
-                if ($crate::kmsg::LOG_FD_KMSG) {
-                    let buf=alloc::format!(concat!("init-wrapper: ",$fmt),$($arg)*);
-                    for line in buf.lines(){
-                        stm.write_str(&line);
-                    }
-                }else{
-                    stm.write_fmt(format_args!(concat!("init-wrapper: ",$fmt),$($arg)*));
-                    stm.write_nl();
-                }
-            }
-        }
+        $crate::kmsg::write_log_line(format_args!($fmt, $($arg)*))
     };
 }
 
